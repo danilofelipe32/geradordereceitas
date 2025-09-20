@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { generateRecipe } from './services/geminiService';
 import { Recipe } from './types';
 
-const dietaryOptionsList = ["Vegetariano", "Vegano", "Sem Glúten", "Sem Laticínios", "Sem Oleaginosas", "Diabetes", "Celíaco", "Ovo Lacto Vegetariano", "Baixo FODMAP", "Keto", "Paleo"];
+const dietaryOptionsList = ["Sem restrições", "Vegetariano", "Vegano", "Sem Glúten", "Sem Laticínios", "Sem Oleaginosas", "Diabetes", "Celíaco", "Ovo Lacto Vegetariano", "Baixo FODMAP", "Keto", "Paleo"];
 const mealTypesList = ["Café da Manhã", "Almoço", "Jantar", "Lanche", "Sobremesa"];
 const unitOptions = ["unidade(s)", "g", "kg", "ml", "L", "xícara(s)", "colher(es) de sopa", "colher(es) de chá", "pitada(s)", "a gosto"];
 
@@ -280,11 +280,24 @@ const App: React.FC = () => {
   };
 
   const handleDietaryChange = (option: string) => {
-    setDietaryRestrictions(prev =>
-      prev.includes(option)
-        ? prev.filter(item => item !== option)
-        : [...prev, option]
-    );
+    setDietaryRestrictions(prev => {
+      // Case 1: User clicks "Sem restrições"
+      if (option === "Sem restrições") {
+        // If it's already selected, unselect it. Otherwise, make it the only selection.
+        return prev.includes("Sem restrições") ? [] : ["Sem restrições"];
+      }
+  
+      // Case 2: User clicks any other option
+      // Remove "Sem restrições" from the current selections
+      const withoutNoRestrictions = prev.filter(item => item !== "Sem restrições");
+  
+      // Toggle the clicked option
+      if (withoutNoRestrictions.includes(option)) {
+        return withoutNoRestrictions.filter(item => item !== option);
+      } else {
+        return [...withoutNoRestrictions, option];
+      }
+    });
   };
 
   const handleIngredientChange = (id: number, field: keyof Omit<Ingredient, 'id'>, value: string) => {
@@ -347,8 +360,8 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-transparent text-gray-800">
-      <main className="container mx-auto px-4 py-8 sm:py-12">
+    <div className="min-h-screen bg-transparent text-gray-800 flex flex-col">
+      <main className="container mx-auto px-4 py-8 sm:py-12 flex-grow">
         <div className="max-w-4xl mx-auto">
           <header className="text-center mb-10">
             <h1 className="text-4xl sm:text-6xl font-bold text-white mb-3 tracking-tight">Gerador de Receitas</h1>
@@ -502,6 +515,11 @@ const App: React.FC = () => {
 
         </div>
       </main>
+      <footer className="w-full text-center p-4 text-gray-300 bg-black/20 backdrop-blur-sm">
+        <p>
+          Produzido por <a href="mailto:danilofelipe862@educar.rn.gov.br" className="font-semibold underline hover:text-green-300 transition-colors">Danilo Arruda</a>
+        </p>
+      </footer>
     </div>
   );
 };
