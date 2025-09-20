@@ -52,7 +52,7 @@ self.addEventListener('fetch', event => {
           const responseToCache = networkResponse.clone();
           
           // Don't cache unsuccessful responses or API calls.
-          if (networkResponse.ok && !networkResponse.url.includes('googleapis.com/v1beta/models')) {
+          if (networkResponse.ok && !networkResponse.url.includes('apifreellm.com/api/chat')) {
             caches.open(CACHE_NAME)
               .then(cache => {
                 cache.put(event.request, responseToCache);

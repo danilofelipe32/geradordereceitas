@@ -1,70 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
 import { Recipe } from '../types';
-
-let ai: GoogleGenAI | null = null;
-
-/**
- * Lazily initializes and returns the GoogleGenAI client.
- * This prevents the app from crashing on load if the API key is not available,
- * allowing the UI to render and show a graceful error on interaction.
- */
-const getAiClient = (): GoogleGenAI => {
-    if (!ai) {
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    }
-    return ai;
-};
-
-
-const recipeSchema = {
-    type: Type.OBJECT,
-    properties: {
-      recipeName: {
-        type: Type.STRING,
-        description: 'O nome da receita em Português.',
-      },
-      description: {
-        type: Type.STRING,
-        description: 'Uma breve descrição da receita em Português.',
-      },
-      servings: {
-        type: Type.STRING,
-        description: "O número de porções que a receita rende, ex: '4 pessoas'.",
-      },
-      prepTime: {
-        type: Type.STRING,
-        description: "O tempo de preparo, ex: '15 minutos'.",
-      },
-      cookTime: {
-        type: Type.STRING,
-        description: "O tempo de cozimento, ex: '30 minutos'.",
-      },
-      ingredients: {
-        type: Type.ARRAY,
-        description: 'Uma lista de ingredientes com quantidades, ex: "1 xícara de farinha".',
-        items: {
-          type: Type.STRING,
-        },
-      },
-      instructions: {
-        type: Type.ARRAY,
-        description: 'Uma lista de instruções passo a passo para a receita.',
-        items: {
-          type: Type.STRING,
-        },
-      },
-      nutrition: {
-        type: Type.OBJECT,
-        description: 'Informações nutricionais por porção.',
-        properties: {
-          calories: { type: Type.STRING, description: "Calorias, ex: '350 kcal'." },
-          protein: { type: Type.STRING, description: "Proteína, ex: '15g'." },
-          carbs: { type: Type.STRING, description: "Carboidratos, ex: '40g'." },
-          fat: { type: Type.STRING, description: "Gordura, ex: '12g'." },
-        },
-      },
-    },
-  };
 
 export const generateRecipe = async (
     ingredients: string,
@@ -84,32 +18,58 @@ export const generateRecipe = async (
         - Tipo de refeição: "${mealType}"
         - Ingredientes principais: ${ingredients}
         - Restrições alimentares: ${dietaryInfo}
+
+        Sua resposta DEVE ser um objeto JSON VÁLIDO e NADA MAIS. Não inclua texto explicativo, comentários ou markdown como \`\`\`json.
+        O objeto JSON deve corresponder estritamente à seguinte estrutura:
+        {
+          "recipeName": "string",
+          "description": "string",
+          "servings": "string (ex: '4 pessoas')",
+          "prepTime": "string (ex: '15 minutos')",
+          "cookTime": "string (ex: '30 minutos')",
+          "ingredients": ["string com quantidade e nome", "...", ...],
+          "instructions": ["passo 1", "passo 2", ...],
+          "nutrition": {
+            "calories": "string (ex: '350 kcal')",
+            "protein": "string (ex: '15g')",
+            "carbs": "string (ex: '40g')",
+            "fat": "string (ex: '12g')"
+          }
+        }
     `;
 
     try {
-        const client = getAiClient();
-        const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: recipeSchema,
+        const response = await fetch("https://apifreellm.com/api/chat", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
             },
+            body: JSON.stringify({ message: prompt }),
         });
-        
-        const jsonText = response.text.trim();
-        
-        // Defensively strip markdown in case the model wraps the JSON
-        const cleanedJsonText = jsonText.replace(/^```json\s*|```\s*$/g, '');
 
-        const recipeData = JSON.parse(cleanedJsonText);
-        return recipeData as Recipe;
+        if (!response.ok) {
+            throw new Error(`Erro de rede: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            try {
+                // The response from the LLM is expected to be a JSON string.
+                const recipeData = JSON.parse(data.response);
+                return recipeData as Recipe;
+            } catch (parseError) {
+                 console.error("Falha ao analisar JSON da resposta da API:", data.response, parseError);
+                 throw new Error("Falha ao processar a resposta da receita. A API retornou um formato JSON inválido.");
+            }
+        } else if (data.status === 'rate_limited') {
+            throw new Error(`Você está fazendo muitas solicitações. Por favor, aguarde ${data.retry_after || 5} segundos e tente novamente.`);
+        } else {
+            throw new Error(`A API retornou um erro: ${data.error || 'Erro desconhecido'}`);
+        }
 
     } catch (error) {
-        console.error("Erro ao gerar receita com Gemini API:", error);
-        if (error instanceof SyntaxError) {
-             throw new Error("Falha ao processar a resposta da receita. A API pode ter retornado um formato JSON inválido.");
-        }
+        console.error("Erro ao gerar receita com ApiFreeLLM:", error);
         if (error instanceof Error) {
             if (error.message.includes('API key not valid')) {
                  throw new Error("A chave da API não é válida. Verifique sua configuração.");
@@ -117,7 +77,10 @@ export const generateRecipe = async (
              if (error.message.includes('quota')) {
                  throw new Error("A cota da API foi excedida. Por favor, tente novamente mais tarde.");
             }
-            throw new Error("Falha ao gerar a receita. A API do Gemini pode estar temporariamente indisponível ou ocorreu um erro de configuração.");
+             if (error.message.includes('Failed to fetch')) {
+                throw new Error("Não foi possível conectar-se à API. Verifique sua conexão com a Internet.");
+            }
+            throw error;
         }
         throw new Error("Ocorreu um erro inesperado durante a geração da receita.");
     }
