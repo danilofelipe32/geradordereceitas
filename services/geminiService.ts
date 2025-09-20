@@ -1,34 +1,5 @@
 import { Recipe } from '../types';
 
-// O schema JSON que a API deve retornar para manter a compatibilidade com o app.
-const schema = {
-  type: "object",
-  properties: {
-    recipeName: { type: "string", description: "O nome da receita." },
-    description: { type: "string", description: "Uma breve e atraente descrição do prato." },
-    servings: { type: "string", description: "Para quantas pessoas esta receita serve." },
-    prepTime: { type: "string", description: "O tempo de preparação, ex: '15 minutos'." },
-    cookTime: { type: "string", description: "O tempo de cozimento, ex: '30 minutos'." },
-    ingredients: { type: "array", description: "Uma lista de todos os ingredientes com as quantidades.", items: { type: "string" } },
-    instructions: { type: "array", description: "Instruções de cozimento passo a passo.", items: { type: "string" } },
-    nutrition: {
-        type: "object",
-        description: "Informações nutricionais estimadas por porção.",
-        properties: {
-            calories: { type: "string", description: "Calorias estimadas, ex: '350 kcal'." },
-            protein: { type: "string", description: "Proteína estimada, ex: '15g'." },
-            carbs: { type: "string", description: "Carboidratos estimados, ex: '40g'." },
-            fat: { type: "string", description: "Gordura estimada, ex: '12g'." }
-        },
-        required: ["calories", "protein", "carbs", "fat"]
-    }
-  },
-  required: ["recipeName", "description", "servings", "prepTime", "cookTime", "ingredients", "instructions", "nutrition"],
-};
-
-// Endpoint da API FreeLLM (este é um endpoint de exemplo)
-const API_URL = 'https://api.freellm.com/v1/chat/completions';
-
 export const generateRecipe = async (
     ingredients: string,
     mealType: string,
@@ -41,62 +12,78 @@ export const generateRecipe = async (
         ? `A receita deve seguir as seguintes restrições alimentares: ${actualRestrictions.join(", ")}.`
         : "Não há restrições alimentares.";
 
-    const systemPrompt = `
-        Você é um assistente de culinária especialista projetado para gerar receitas.
-        Sua resposta DEVE ser um único objeto JSON e nada mais. Não inclua markdown (como \`\`\`json), texto explicativo ou qualquer outra coisa fora do objeto JSON.
-        O objeto JSON deve seguir estritamente o seguinte schema:
-        ${JSON.stringify(schema, null, 2)}
-    `;
+    // Constrói o prompt detalhado para a ApiFreeLLM, exigindo uma resposta em JSON.
+    const prompt = `
+        Você é um assistente culinário especialista. Sua única função é retornar um objeto JSON de uma receita.
+        NÃO retorne NADA além do objeto JSON. Não use markdown (como \`\`\`json), não adicione texto antes ou depois. Sua resposta deve ser apenas o JSON bruto.
 
-    const userPrompt = `
-        Gere uma única receita completa para uma refeição do tipo "${mealType}".
-        Os ingredientes principais disponíveis são: ${ingredients}.
-        Você pode incluir ingredientes básicos comuns como óleo, sal, pimenta e água, se necessário.
-        ${dietaryInfo}
-        A receita deve ser criativa e atraente.
-        Forneça também informações nutricionais estimadas por porção, incluindo calorias, proteínas, carboidratos e gorduras.
+        O objeto JSON deve ter esta estrutura exata:
+        {
+          "recipeName": "string (em Português)",
+          "description": "string (em Português)",
+          "servings": "string",
+          "prepTime": "string (ex: '15 minutos')",
+          "cookTime": "string (ex: '30 minutos')",
+          "ingredients": ["string com quantidade e nome", "string", ...],
+          "instructions": ["string passo-a-passo", "string", ...],
+          "nutrition": {
+            "calories": "string (ex: '350 kcal')",
+            "protein": "string (ex: '15g')",
+            "carbs": "string (ex: '40g')",
+            "fat": "string (ex: '12g')"
+          }
+        }
+
+        Gere uma receita com base nos seguintes detalhes:
+        - Tipo de refeição: "${mealType}"
+        - Ingredientes principais: ${ingredients}
+        - Restrições alimentares: ${dietaryInfo}
+        
+        A receita deve ser criativa, atraente e o conteúdo deve estar em português.
     `;
 
     try {
-        const response = await fetch(API_URL, {
+        const apiResponse = await fetch('https://apifreellm.com/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                model: "freellm-recipe-generator", // Nome do modelo hipotético
-                messages: [
-                    { role: 'system', content: systemPrompt.trim() },
-                    { role: 'user', content: userPrompt.trim() }
-                ]
-            }),
+            body: JSON.stringify({ message: prompt }),
         });
-        
-        if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`A API FreeLLM retornou um erro ${response.status}: ${errorBody}`);
+
+        if (!apiResponse.ok) {
+            // A ApiFreeLLM geralmente retorna 200 mesmo para erros, mas isso é um fallback para problemas de rede.
+            throw new Error(`Erro de rede ao contatar a API: ${apiResponse.statusText}`);
         }
 
-        const data = await response.json();
-        
-        // A estrutura da resposta da API pode variar, esta é uma suposição comum
-        const jsonText = data.choices?.[0]?.message?.content;
+        const responseData = await apiResponse.json();
 
-        if (!jsonText) {
-            throw new Error("A resposta da API não continha o conteúdo da receita esperado.");
+        if (responseData.status !== 'success') {
+            const errorMessage = responseData.error || 'Erro desconhecido retornado pela API FreeLLM.';
+            const retryAfter = responseData.retry_after ? ` Tente novamente em ${responseData.retry_after} segundos.` : '';
+            throw new Error(`Falha ao gerar receita: ${errorMessage}${retryAfter}`);
         }
 
-        // Tenta limpar qualquer formatação de markdown que a API possa adicionar por engano
-        const cleanedJsonText = jsonText.replace(/^```json\n|```$/g, '').trim();
-
-        const recipeData = JSON.parse(cleanedJsonText);
+        if (!responseData.response) {
+            throw new Error("A API FreeLLM retornou uma resposta vazia.");
+        }
+        
+        // A resposta da ApiFreeLLM é uma string que deve ser o nosso JSON da receita.
+        const jsonText = responseData.response.trim();
+        
+        const recipeData = JSON.parse(jsonText);
         return recipeData as Recipe;
 
-    } catch (error) {
+    } catch (error)
+    {
         console.error("Erro ao gerar receita com ApiFreeLLM:", error);
-        if (error instanceof Error) {
-            throw new Error(`Falha ao gerar a receita da ApiFreeLLM: ${error.message}`);
+        if (error instanceof SyntaxError) {
+             throw new Error("Falha ao processar a resposta da receita. A API pode ter retornado um formato JSON inválido.");
         }
-        throw new Error("Ocorreu um erro desconhecido ao gerar a receita.");
+        if (error instanceof Error) {
+            // Re-lança mensagens personalizadas ou a mensagem de erro original para a UI.
+            throw new Error(error.message || "Ocorreu um erro desconhecido durante a geração da receita.");
+        }
+        throw new Error("Ocorreu um erro inesperado e desconhecido.");
     }
 };
