@@ -1,10 +1,17 @@
 // The name for our cache
-const CACHE_NAME = 'gemini-recipe-generator-v1';
+const CACHE_NAME = 'gemini-recipe-generator-v2';
 
 // The list of files that make up the application's shell.
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
+  '/index.tsx',
+  '/App.tsx',
+  '/services/geminiService.ts',
+  '/types.ts',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap',
   'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
@@ -15,10 +22,11 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Opened cache');
+        console.log('Opened cache and caching app shell');
         // addAll() is atomic. If any file fails, the whole operation fails.
         return cache.addAll(URLS_TO_CACHE);
       })
+      .then(() => self.skipWaiting()) // Force the waiting service worker to become the active service worker.
   );
 });
 
@@ -44,7 +52,6 @@ self.addEventListener('fetch', event => {
           const responseToCache = networkResponse.clone();
           
           // Don't cache unsuccessful responses or API calls.
-          // This example only caches same-origin requests, but you could expand this logic.
           if (networkResponse.ok && !networkResponse.url.includes('googleapis.com/v1beta/models')) {
             caches.open(CACHE_NAME)
               .then(cache => {
@@ -78,6 +85,6 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim()) // Take control of all open clients
   );
 });
