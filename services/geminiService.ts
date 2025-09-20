@@ -1,7 +1,20 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { Recipe } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let ai: GoogleGenAI | null = null;
+
+/**
+ * Lazily initializes and returns the GoogleGenAI client.
+ * This prevents the app from crashing on load if the API key is not available,
+ * allowing the UI to render and show a graceful error on interaction.
+ */
+const getAiClient = (): GoogleGenAI => {
+    if (!ai) {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+    return ai;
+};
+
 
 const recipeSchema = {
     type: Type.OBJECT,
@@ -74,7 +87,8 @@ export const generateRecipe = async (
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const client = getAiClient();
+        const response = await client.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
