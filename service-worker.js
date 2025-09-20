@@ -1,17 +1,17 @@
 // The name for our cache
-const CACHE_NAME = 'gemini-recipe-generator-v2';
+const CACHE_NAME = 'gemini-recipe-generator-v3';
 
 // The list of files that make up the application's shell.
 const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/index.tsx',
-  '/App.tsx',
-  '/services/geminiService.ts',
-  '/types.ts',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+  './',
+  './index.html',
+  './index.tsx',
+  './App.tsx',
+  './services/geminiService.ts',
+  './types.ts',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@400;500&display=swap',
   'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
